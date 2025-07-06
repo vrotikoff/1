@@ -80,8 +80,8 @@ def train():
         
         while not board.is_game_over(claim_draw=True):
             move_counter += 1
-            # Получаем ход от агента MCTS
-            move, policy_target = agent.get_move(board)
+            # Получаем ход от агента MCTS в режиме обучения (с шумом)
+            move, policy_target = agent.get_move(board, is_training=True)
             
             # Сохраняем состояние, политику и текущего игрока
             state_tensor = board_to_tensor(board, device)

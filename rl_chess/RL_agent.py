@@ -73,10 +73,14 @@ class MCTSAgent:
         self.num_simulations = num_simulations
         self.batch_size = batch_size
 
-    def get_move(self, board: chess.Board):
+    def get_move(self, board: chess.Board, is_training=False):
         """
         Выполняет MCTS симуляции, чтобы выбрать лучший ход.
-        Возвравращает лучший ход и распределение вероятностей (политику) для обучения.
+        Возвращает лучший ход и распределение вероятностей (политику) для обучения.
+        
+        Args:
+            board: Текущее состояние шахматной доски
+            is_training: Если True, применяется шум к политике для исследования
         """
         root = Node(board.copy(), prior=1.0)
         
@@ -90,6 +94,42 @@ class MCTSAgent:
             values, policies = self.batch_predict([board])
             init_value = values[0]
             init_policy = policies[0]
+            
+            # --- Применение шума к политике в режиме обучения ---
+            if is_training:
+                # Сохраняем "чистую" политику для логирования
+                clean_policy = init_policy.copy()
+                
+                # Применяем Dirichlet шум
+                legal_moves = list(init_policy.keys())
+                if len(legal_moves) > 0:
+                    # Генерируем шум с параметром alpha = 0.3 (стандартное значение для шахмат)
+                    noise = np.random.dirichlet([0.3] * len(legal_moves))
+                    
+                    # Смешиваем оригинальную политику с шумом (85% оригинал + 15% шум)
+                    noisy_policy = {}
+                    for i, move in enumerate(legal_moves):
+                        noisy_policy[move] = 0.85 * init_policy[move] + 0.15 * noise[i]
+                    
+                    # Нормализуем, чтобы сумма была равна 1
+                    total_prob = sum(noisy_policy.values())
+                    if total_prob > 0:
+                        for move in noisy_policy:
+                            noisy_policy[move] /= total_prob
+                    
+                    init_policy = noisy_policy
+                
+                # Логирование сравнения чистой и зашумленной политик
+                top_clean = sorted(clean_policy.items(), key=lambda x: x[1], reverse=True)[:5]
+                top_noisy = sorted(init_policy.items(), key=lambda x: x[1], reverse=True)[:5]
+                
+                think_logger.debug("[DEBUG] Применен шум к политике в режиме обучения:")
+                think_logger.debug("[DEBUG] Чистая политика (топ-5):")
+                for rank, (mv, prob) in enumerate(top_clean, 1):
+                    think_logger.debug(f"[DEBUG]   {rank}. {mv.uci()} ({prob:.3f})")
+                think_logger.debug("[DEBUG] Зашумленная политика (топ-5):")
+                for rank, (mv, prob) in enumerate(top_noisy, 1):
+                    think_logger.debug(f"[DEBUG]   {rank}. {mv.uci()} ({prob:.3f})")
             
             root.expand(init_policy)
             self.backpropagate(root, init_value)
