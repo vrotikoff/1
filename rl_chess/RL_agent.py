@@ -250,8 +250,9 @@ class MCTSAgent:
             state_tensors = [board_to_tensor(b, self.device) for b in boards]
             state_batch = torch.stack(state_tensors)
             
-            # Один вызов сети
-            policy_logits, values = self.net(state_batch)
+            # Mixed Precision для inference (дополнительное ускорение)
+            with torch.cuda.amp.autocast():
+                policy_logits, values = self.net(state_batch)
 
         # Обрабатываем результаты
         policies = torch.softmax(policy_logits, dim=1)

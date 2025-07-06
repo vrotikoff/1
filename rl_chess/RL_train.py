@@ -49,9 +49,13 @@ def train():
     # 1. Инициализация
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Используется устройство: {device}")
+    if device.type == 'cuda':
+        logging.info("🚀 Mixed Precision Training активирован для ускорения на GPU!")
 
     net = ChessNetwork().to(device)
     optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
+    # Mixed Precision Training для H100 - ускорение ~1.5-2x
+    scaler = torch.cuda.amp.GradScaler()
     agent = MCTSAgent(net, device=device, num_simulations=MCTS_SIMULATIONS)
     
     start_game = 0
@@ -63,6 +67,9 @@ def train():
         checkpoint = torch.load(CHECKPOINT_PATH)
         net.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        # Загружаем состояние scaler для Mixed Precision
+        if 'scaler_state_dict' in checkpoint:
+            scaler.load_state_dict(checkpoint['scaler_state_dict'])
         start_game = checkpoint['game_number']
         replay_memory = checkpoint['replay_memory']
         logging.info(f"Прогресс успешно загружен. Обучение продолжится с игры #{start_game + 1}")
@@ -113,7 +120,7 @@ def train():
         # 5. Обучение нейросети (если накоплено достаточно данных)
         if len(replay_memory) >= BATCH_SIZE:
             logging.info("--- Начало обучения сети ---")
-            update_network(net, optimizer, replay_memory, device)
+            update_network(net, optimizer, replay_memory, device, scaler)
         
         # 6. Сохранение модели и чекпоинта
         if (i_game + 1) % SAVE_EVERY_N_GAMES == 0:
@@ -127,13 +134,14 @@ def train():
                 'game_number': i_game + 1,
                 'model_state_dict': net.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'scaler_state_dict': scaler.state_dict(),  # Сохраняем состояние Mixed Precision
                 'replay_memory': replay_memory,
             }, CHECKPOINT_PATH)
             logging.info(f"Модель сохранена в {MODEL_SAVE_PATH}, чекпоинт в {CHECKPOINT_PATH}")
 
 
-def update_network(net, optimizer, memory, device):
-    """ Функция для одного шага обучения нейросети. """
+def update_network(net, optimizer, memory, device, scaler):
+    """ Функция для одного шага обучения нейросети с Mixed Precision Training. """
     net.train()
 
     for _ in range(EPOCHS_PER_UPDATE):
@@ -147,19 +155,23 @@ def update_network(net, optimizer, memory, device):
         policy_targets = torch.stack(policy_targets).to(device)
         value_targets = torch.stack(value_targets).to(device)
         
-        # Прямой проход
-        policy_logits, value_preds = net(states)
-        
-        # Расчет потерь
-        policy_loss = -torch.sum(policy_targets * torch.log_softmax(policy_logits, dim=1), dim=1).mean()
-        value_loss = torch.nn.functional.mse_loss(value_preds, value_targets)
-        
-        total_loss = policy_loss + value_loss
-        
-        # Обратный проход и оптимизация
+        # Обнуляем градиенты
         optimizer.zero_grad()
-        total_loss.backward()
-        optimizer.step()
+        
+        # Mixed Precision Forward Pass
+        with torch.cuda.amp.autocast():
+            policy_logits, value_preds = net(states)
+            
+            # Расчет потерь
+            policy_loss = -torch.sum(policy_targets * torch.log_softmax(policy_logits, dim=1), dim=1).mean()
+            value_loss = torch.nn.functional.mse_loss(value_preds, value_targets)
+            
+            total_loss = policy_loss + value_loss
+        
+        # Mixed Precision Backward Pass
+        scaler.scale(total_loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
     logging.info(f"Обучение завершено. Total Loss: {total_loss.item():.4f}, Policy Loss: {policy_loss.item():.4f}, Value Loss: {value_loss.item():.4f}")
 
