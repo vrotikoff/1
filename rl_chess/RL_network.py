@@ -5,14 +5,14 @@ import torch.nn.functional as F
 import numpy as np
 import chess
 
-# Ещё больше «нейронов» для повышения силы (требует серьёзных ресурсов)
-NUM_RESIDUAL_BLOCKS = 24  # было 20, ранее 12
-NUM_CHANNELS = 384  # было 256 — количество фильтров в сверточных слоях
+# More neurons for higher strength (requires serious resources)
+NUM_RESIDUAL_BLOCKS = 24  # was 20, before 12
+NUM_CHANNELS = 384  # was 256 - number of filters in conv layers
 
 class ResidualBlock(nn.Module):
     """
-    Остаточный блок, основная строительная единица сети.
-    Состоит из двух сверточных слоев и "skip connection".
+    Residual block, main building unit of the network.
+    Consists of two convolutional layers and skip connection.
     """
     def __init__(self, in_channels, out_channels):
         super(ResidualBlock, self).__init__()
@@ -28,53 +28,53 @@ class ResidualBlock(nn.Module):
         out = F.relu(out)
         out = self.conv2(out)
         out = self.bn2(out)
-        out += residual # Ключевой элемент - "проброс" исходных данных
+        out += residual # Key element - skip connection
         out = F.relu(out)
         return out
 
 class ChessNetwork(nn.Module):
     """
-    Основная нейронная сеть, вдохновленная архитектурой AlphaZero.
+    Main neural network inspired by AlphaZero architecture.
     """
     def __init__(self):
         super(ChessNetwork, self).__init__()
-        # 1. Входной слой: преобразует 18-канальное представление доски в NUM_CHANNELS каналов
+        # 1. Input layer: converts 18-channel board representation to NUM_CHANNELS
         self.conv_input = nn.Conv2d(18, NUM_CHANNELS, kernel_size=3, stride=1, padding=1)
         self.bn_input = nn.BatchNorm2d(NUM_CHANNELS)
 
-        # 2. "Тело" сети: 6 остаточных блоков
+        # 2. Network body: residual blocks
         self.residual_blocks = nn.ModuleList([ResidualBlock(NUM_CHANNELS, NUM_CHANNELS) for _ in range(NUM_RESIDUAL_BLOCKS)])
 
-        # 3. "Голова" Политики (Policy Head)
+        # 3. Policy Head
         self.policy_conv = nn.Conv2d(NUM_CHANNELS, 2, kernel_size=1, stride=1)
         self.policy_bn = nn.BatchNorm2d(2)
-        # 4672 - это все возможные ходы в шахматах (включая продвижение пешек)
+        # 4672 - all possible chess moves (including pawn promotions)
         self.policy_fc = nn.Linear(2 * 8 * 8, 4672)
 
-        # 4. "Голова" Ценности (Value Head)
+        # 4. Value Head
         self.value_conv = nn.Conv2d(NUM_CHANNELS, 1, kernel_size=1, stride=1)
         self.value_bn = nn.BatchNorm2d(1)
         self.value_fc1 = nn.Linear(1 * 8 * 8, 256)
         self.value_fc2 = nn.Linear(256, 1)
 
     def forward(self, x):
-        # Прогоняем данные через входной слой
+        # Pass data through input layer
         x = self.conv_input(x)
         x = self.bn_input(x)
         x = F.relu(x)
 
-        # Прогоняем через тело сети
+        # Pass through network body
         for block in self.residual_blocks:
             x = block(x)
 
-        # Выход головы политики
+        # Policy head output
         policy = self.policy_conv(x)
         policy = self.policy_bn(policy)
         policy = F.relu(policy)
         policy = policy.view(-1, 2 * 8 * 8)
         policy = self.policy_fc(policy)
 
-        # Выход головы ценности
+        # Value head output
         value = self.value_conv(x)
         value = self.value_bn(value)
         value = F.relu(value)
@@ -83,19 +83,19 @@ class ChessNetwork(nn.Module):
         value = F.relu(value)
         value = self.value_fc2(value)
         
-        # Возвращаем вероятности ходов (после log_softmax) и оценку позиции (после tanh)
+        # Return move probabilities (after log_softmax) and position evaluation (after tanh)
         return F.log_softmax(policy, dim=1), torch.tanh(value)
 
 def board_to_tensor(board: chess.Board, device):
     """
-    Преобразует доску (chess.Board) в тензор 8x8x18 для входа в нейросеть.
-    18 каналов: 6 для своих фигур, 6 для фигур оппонента, 6 служебных.
+    Converts chess.Board to 8x8x18 tensor for neural network input.
+    18 channels: 6 for own pieces, 6 for opponent pieces, 6 auxiliary.
     """
     
-    # Инициализируем пустой тензор
+    # Initialize empty tensor
     tensor = torch.zeros((18, 8, 8), dtype=torch.float32)
 
-    # Словарь для сопоставления типа фигуры с индексом канала
+    # Dictionary for mapping piece type to channel index
     piece_to_channel = {
         chess.PAWN: 0,
         chess.KNIGHT: 1,
@@ -111,21 +111,21 @@ def board_to_tensor(board: chess.Board, device):
         chess.KING + 6: 11
     }
 
-    # Заполняем тензор данными о фигурах
+    # Fill tensor with piece data
     for piece_type in chess.PIECE_TYPES:
         for color in chess.COLORS:
-            # Белые фигуры: каналы 0-5, Черные: 6-11
+            # White pieces: channels 0-5, Black: 6-11
             channel_index = piece_to_channel.get(piece_type + (6 if color == chess.BLACK else 0))
             for square in board.pieces(piece_type, color):
                 rank, file = chess.square_rank(square), chess.square_file(square)
                 tensor[channel_index, rank, file] = 1
 
-    # 12-й канал: цвет текущего игрока (0 - черный, 1 - белый)
+    # Channel 12: current player color (0 - black, 1 - white)
     tensor[12, :, :] = 1.0 if board.turn == chess.WHITE else 0.0
-    # 13-й канал: счетчик ходов без взятий и продвижения пешек (для правила 50 ходов)
+    # Channel 13: halfmove clock for 50-move rule
     tensor[13, :, :] = board.halfmove_clock / 100.0
 
-    # Каналы для рокировок
+    # Castling rights channels
     tensor[14, :, :] = 1 if board.has_kingside_castling_rights(chess.WHITE) else 0
     tensor[15, :, :] = 1 if board.has_queenside_castling_rights(chess.WHITE) else 0
     tensor[16, :, :] = 1 if board.has_kingside_castling_rights(chess.BLACK) else 0
