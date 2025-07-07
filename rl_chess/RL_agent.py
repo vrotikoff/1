@@ -153,21 +153,14 @@ class MCTSAgent:
             virtual_loss_paths = []  # Сохраняем пути для отмены virtual loss
             
             # Фаза 1: Накопление (Selection) с Virtual Loss
-            unique_leaves = set()  # Для отслеживания уникальности
             for _ in range(num_to_run):
                 leaf = self.select_leaf(root)
                 leaves_to_process.append(leaf)
-                unique_leaves.add(id(leaf))  # Отслеживаем уникальные узлы
                 
                 # Применяем Virtual Loss - временно "наказываем" этот путь
                 path_to_leaf = self.get_path_to_node(leaf)
                 virtual_loss_paths.append(path_to_leaf)
                 self.apply_virtual_loss(path_to_leaf)
-            
-            # Логирование эффективности Virtual Loss
-            if num_to_run > 1:
-                efficiency = len(unique_leaves) / num_to_run * 100
-                think_logger.debug(f"[VIRTUAL_LOSS] Батч: {num_to_run}, уникальных узлов: {len(unique_leaves)}, эффективность: {efficiency:.1f}%")
 
             boards_to_predict = []
             nodes_for_nn = []
