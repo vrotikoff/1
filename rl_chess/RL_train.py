@@ -46,9 +46,108 @@ def format_board_for_log(board: chess.Board) -> str:
     lines.append("")
     lines.append("Обозначения: K=Король Q=Ферзь R=Ладья B=Слон N=Конь P=Пешка")
     lines.append("Белые=ЗАГЛАВНЫЕ, черные=строчные")
-    lines.append("⚠️ Для корректного отображения нужен моноширинный шрифт!")
+    lines.append("")
+    lines.append("📋 Для браузера скопируйте и вставьте в <pre> теги или используйте Courier New")
     
     return "\n".join(lines)
+
+def format_board_for_html(board: chess.Board) -> str:
+    """
+    Создает HTML-версию доски для корректного отображения в браузере.
+    """
+    # Маппинг фигур в цветные символы
+    piece_symbols = {
+        (chess.PAWN, chess.WHITE): 'P', (chess.PAWN, chess.BLACK): 'p',
+        (chess.KNIGHT, chess.WHITE): 'N', (chess.KNIGHT, chess.BLACK): 'n',
+        (chess.BISHOP, chess.WHITE): 'B', (chess.BISHOP, chess.BLACK): 'b', 
+        (chess.ROOK, chess.WHITE): 'R', (chess.ROOK, chess.BLACK): 'r',
+        (chess.QUEEN, chess.WHITE): 'Q', (chess.QUEEN, chess.BLACK): 'q',
+        (chess.KING, chess.WHITE): 'K', (chess.KING, chess.BLACK): 'k'
+    }
+    
+    lines = []
+    lines.append('<pre style="font-family: \'Courier New\', Consolas, monospace; font-size: 14px; line-height: 1.2;">')
+    lines.append("  +---+---+---+---+---+---+---+---+")
+    
+    for rank in range(7, -1, -1):  # 8, 7, 6, ..., 1
+        rank_line = f"{rank + 1} |"
+        for file in range(8):  # a, b, c, ..., h
+            square = chess.square(file, rank)
+            piece = board.piece_at(square)
+            if piece:
+                symbol = piece_symbols[(piece.piece_type, piece.color)]
+            else:
+                symbol = " "
+            rank_line += f" {symbol} |"
+        lines.append(rank_line)
+        lines.append("  +---+---+---+---+---+---+---+---+")
+    
+    lines.append("    a   b   c   d   e   f   g   h")
+    lines.append("")
+    lines.append("Обозначения: K=Король Q=Ферзь R=Ладья B=Слон N=Конь P=Пешка")
+    lines.append("Белые=ЗАГЛАВНЫЕ, черные=строчные")
+    lines.append('</pre>')
+    
+    return "\n".join(lines)
+
+def create_html_board_file(board: chess.Board, game_num: int, move_num: int, last_move: str):
+    """
+    Создает HTML файл с текущей доской для просмотра в браузере.
+    """
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>RL Chess - Игра #{game_num}, Ход #{move_num}</title>
+    <style>
+        body {{ 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5; 
+        }}
+        .header {{ 
+            background-color: #2c3e50; 
+            color: white; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-bottom: 20px; 
+        }}
+        .board {{ 
+            background-color: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        }}
+        pre {{ 
+            font-family: 'Courier New', Consolas, monospace; 
+            font-size: 16px; 
+            line-height: 1.3; 
+            margin: 0; 
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 RL Chess Training</h1>
+        <h2>Игра #{game_num} | Ход #{move_num} | Последний ход: {last_move}</h2>
+    </div>
+    <div class="board">
+        {format_board_for_html(board)}
+    </div>
+    <div style="margin-top: 20px; padding: 15px; background-color: white; border-radius: 8px;">
+        <h3>📝 Как использовать:</h3>
+        <ul>
+            <li><strong>Обновляется каждые 10 ходов</strong> во время обучения</li>
+            <li><strong>Автоматически обновляется</strong> - просто обновите страницу в браузере</li>
+            <li><strong>Моноширинный шрифт</strong> обеспечивает идеальное выравнивание</li>
+        </ul>
+        <p><em>Файл: current_board.html</em></p>
+    </div>
+</body>
+</html>"""
+    
+    with open("current_board.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
 
 # --- Настройка логирования ---
 # Отдельные форматтеры для файла и консоли
@@ -99,6 +198,7 @@ def train():
         logging.info(f"   💾 Увеличенный BATCH_SIZE: {BATCH_SIZE} (было 600)")
         logging.info(f"   🧠 Увеличенные MCTS симуляции: {MCTS_SIMULATIONS} (было 3600)")
         logging.info("   🚀 Ожидаемое ОБЩЕЕ ускорение: 6-10x!")
+        logging.info("   🌐 HTML доски будут сохраняться в 'current_board.html'")
 
     net = ChessNetwork().to(device)
     
@@ -153,6 +253,10 @@ def train():
             logging.info(f"Игра #{i_game+1} | Ход #{move_counter}: {move.uci()}")
             # Логируем красиво отформатированную доску
             logging.info(f"\n{format_board_for_log(board)}")
+            
+            # Создаем HTML файл с досками для просмотра в браузере (каждые 10 ходов)
+            if move_counter % 10 == 0:
+                create_html_board_file(board, i_game+1, move_counter, move.uci())
         
         logging.info(f"Игра #{i_game+1} завершена после {move_counter} ходов. Результат: {board.result(claim_draw=True)}")
         
