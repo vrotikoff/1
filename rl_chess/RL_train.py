@@ -14,6 +14,7 @@ from rl_chess.RL_agent import MCTSAgent
 def format_board_for_log(board: chess.Board) -> str:
     """
     Создает идеально выровненную ASCII доску с классическими шахматными обозначениями.
+    ПРИМЕЧАНИЕ: Для корректного отображения используйте моноширинный шрифт!
     """
     # Маппинг фигур в цветные символы
     piece_symbols = {
@@ -45,6 +46,7 @@ def format_board_for_log(board: chess.Board) -> str:
     lines.append("")
     lines.append("Обозначения: K=Король Q=Ферзь R=Ладья B=Слон N=Конь P=Пешка")
     lines.append("Белые=ЗАГЛАВНЫЕ, черные=строчные")
+    lines.append("⚠️ Для корректного отображения нужен моноширинный шрифт!")
     
     return "\n".join(lines)
 
