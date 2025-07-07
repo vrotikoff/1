@@ -9,6 +9,7 @@ from rl_chess.RL_utils import move_to_index, index_to_move, POLICY_OUTPUT_SIZE
 
 # Константы для MCTS
 C_PUCT = 1.0  # Коэффициент, балансирующий между исследованием (exploration) и использованием (exploitation)
+VIRTUAL_LOSS = 1.0  # Величина виртуальной потери для батчевого MCTS (предотвращает повторный выбор одних путей в батче)
 
 # --- Настройка отдельного логгера для "размышлений" ---
 think_logger = logging.getLogger("thinking")
@@ -143,22 +144,36 @@ class MCTSAgent:
             for rank, (mv, prob) in enumerate(top_policy, 1):
                 think_logger.debug(f"[DEBUG]     {rank}. {mv.uci()} ({prob:.3f})")
         
-        # --- Основной цикл симуляций (пакетная обработка) ---
+        # --- Основной цикл симуляций (пакетная обработка с Virtual Loss) ---
         while sims_done < self.num_simulations:
             num_to_run = min(self.batch_size, self.num_simulations - sims_done)
             
             leaves_to_process = []
+            virtual_loss_paths = []  # Сохраняем пути для отмены virtual loss
             
-            # Фаза 1: Накопление (Selection)
+            # Фаза 1: Накопление (Selection) с Virtual Loss
+            unique_leaves = set()  # Для отслеживания уникальности
             for _ in range(num_to_run):
                 leaf = self.select_leaf(root)
                 leaves_to_process.append(leaf)
+                unique_leaves.add(id(leaf))  # Отслеживаем уникальные узлы
+                
+                # Применяем Virtual Loss - временно "наказываем" этот путь
+                path_to_leaf = self.get_path_to_node(leaf)
+                virtual_loss_paths.append(path_to_leaf)
+                self.apply_virtual_loss(path_to_leaf)
+            
+            # Логирование эффективности Virtual Loss
+            if num_to_run > 1:
+                efficiency = len(unique_leaves) / num_to_run * 100
+                think_logger.debug(f"[VIRTUAL_LOSS] Батч: {num_to_run}, уникальных узлов: {len(unique_leaves)}, эффективность: {efficiency:.1f}%")
 
             boards_to_predict = []
             nodes_for_nn = []
+            terminal_results = []  # Для терминальных узлов
             
             # Обрабатываем терминальные узлы и собираем остальные для нейросети
-            for leaf in leaves_to_process:
+            for i, leaf in enumerate(leaves_to_process):
                 if leaf.board.is_game_over(claim_draw=True):
                     # Если узел терминальный, его ценность известна.
                     result = leaf.board.result(claim_draw=True)
@@ -166,23 +181,31 @@ class MCTSAgent:
                     elif result == "0-1": value = -1.0
                     else: value = 0.0
                     # Ценность для игрока, который СДЕЛАЛ ход в это состояние, поэтому инвертируем.
-                    self.backpropagate(leaf, -value)
+                    terminal_results.append((i, -value))
                 else:
                     # Если узел не терминальный, добавляем его в очередь на обработку нейросетью.
-                    # Проверяем, что он еще не был расширен (это может случиться, если
-                    # два потока выбора в одном батче придут в один и тот же лист).
+                    # Проверяем, что он еще не был расширен
                     if leaf.is_leaf():
                          boards_to_predict.append(leaf.board)
-                         nodes_for_nn.append(leaf)
+                         nodes_for_nn.append((i, leaf))  # Сохраняем индекс для связи с virtual loss
             
             # Фаза 2: Пакетная Оценка (Evaluation)
             if boards_to_predict:
                 values, policies = self.batch_predict(boards_to_predict)
                 
                 # Фаза 3: Расширение и Обратное Распространение (Expansion & Backpropagation)
-                for i, node in enumerate(nodes_for_nn):
-                    node.expand(policies[i])
-                    self.backpropagate(node, values[i])
+                for j, (original_idx, node) in enumerate(nodes_for_nn):
+                    # Сначала отменяем Virtual Loss
+                    self.remove_virtual_loss(virtual_loss_paths[original_idx])
+                    # Затем расширяем и применяем реальное обновление
+                    node.expand(policies[j])
+                    self.backpropagate(node, values[j])
+            
+            # Обрабатываем терминальные узлы
+            for original_idx, value in terminal_results:
+                # Отменяем Virtual Loss и применяем реальное значение
+                self.remove_virtual_loss(virtual_loss_paths[original_idx])
+                self.backpropagate(leaves_to_process[original_idx], value)
 
             sims_done += num_to_run
             
@@ -215,6 +238,41 @@ class MCTSAgent:
                     policy_target[idx] = count / total_visits
                 
         return best_move, policy_target
+
+    def get_path_to_node(self, node: Node) -> list[Node]:
+        """
+        Возвращает путь от корня до указанного узла.
+        """
+        path = []
+        current = node
+        while current is not None:
+            path.append(current)
+            current = current.parent
+        return list(reversed(path))  # От корня к листу
+
+    def apply_virtual_loss(self, path: list[Node]):
+        """
+        Применяет виртуальную потерю к пути от корня до листа.
+        Это временно делает путь менее привлекательным для следующих select_leaf.
+        """
+        for node in path:
+            node.N += 1
+            node.W -= VIRTUAL_LOSS
+            if node.N > 0:
+                node.Q = node.W / node.N
+
+    def remove_virtual_loss(self, path: list[Node]):
+        """
+        Отменяет виртуальную потерю с пути.
+        Вызывается перед применением реального обновления.
+        """
+        for node in path:
+            node.N -= 1
+            node.W += VIRTUAL_LOSS
+            if node.N > 0:
+                node.Q = node.W / node.N
+            else:
+                node.Q = 0
 
     def select_leaf(self, node: Node) -> Node:
         """

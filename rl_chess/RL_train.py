@@ -92,9 +92,10 @@ def train():
         logging.info("   ⚡ torch.compile() - ожидается 2-3x ускорение")
         logging.info("   🔥 Mixed Precision Training - ускорение ~1.5-2x")
         logging.info("   📊 Gradient Accumulation - эффективный батч 4096")
+        logging.info("   🎯 Virtual Loss MCTS - улучшенное исследование дерева")
         logging.info(f"   💾 Увеличенный BATCH_SIZE: {BATCH_SIZE} (было 600)")
         logging.info(f"   🧠 Увеличенные MCTS симуляции: {MCTS_SIMULATIONS} (было 3600)")
-        logging.info("   🎯 Ожидаемое общее ускорение: 4-6x!")
+        logging.info("   🚀 Ожидаемое общее ускорение: 4-6x!")
 
     net = ChessNetwork().to(device)
     
