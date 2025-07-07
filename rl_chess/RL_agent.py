@@ -245,7 +245,7 @@ class MCTSAgent:
             return [], []
 
         self.net.eval()
-        with torch.no_grad():
+        with torch.inference_mode():  # Быстрее чем torch.no_grad()
             # Преобразуем все доски в батч тензоров
             state_tensors = [board_to_tensor(b, self.device) for b in boards]
             state_batch = torch.stack(state_tensors)
