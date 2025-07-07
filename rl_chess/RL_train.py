@@ -12,32 +12,38 @@ from rl_chess.RL_agent import MCTSAgent
 
 def format_board_for_log(board: chess.Board) -> str:
     """
-    Создает красиво отформатированную строку доски с Unicode фигурами и правильным выравниванием.
+    Создает идеально выровненную ASCII доску с классическими шахматными обозначениями.
     """
+    # Маппинг фигур в цветные символы
+    piece_symbols = {
+        (chess.PAWN, chess.WHITE): 'P', (chess.PAWN, chess.BLACK): 'p',
+        (chess.KNIGHT, chess.WHITE): 'N', (chess.KNIGHT, chess.BLACK): 'n',
+        (chess.BISHOP, chess.WHITE): 'B', (chess.BISHOP, chess.BLACK): 'b', 
+        (chess.ROOK, chess.WHITE): 'R', (chess.ROOK, chess.BLACK): 'r',
+        (chess.QUEEN, chess.WHITE): 'Q', (chess.QUEEN, chess.BLACK): 'q',
+        (chess.KING, chess.WHITE): 'K', (chess.KING, chess.BLACK): 'k'
+    }
+    
     lines = []
-    lines.append("┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐")
+    lines.append("  +---+---+---+---+---+---+---+---+")
     
     for rank in range(7, -1, -1):  # 8, 7, 6, ..., 1
-        rank_line = f"│"
+        rank_line = f"{rank + 1} |"
         for file in range(8):  # a, b, c, ..., h
             square = chess.square(file, rank)
             piece = board.piece_at(square)
             if piece:
-                symbol = piece.unicode_symbol()
-                # Добавляем пробелы для выравнивания (фиксированная ширина 3 символа)
-                cell_content = f" {symbol} "
+                symbol = piece_symbols[(piece.piece_type, piece.color)]
             else:
-                cell_content = "   "  # 3 пробела для пустой клетки
-            rank_line += f"{cell_content}│"
-        rank_line += f" {rank + 1}"  # Номер ранга
+                symbol = " "
+            rank_line += f" {symbol} |"
         lines.append(rank_line)
-        
-        # Разделитель между рангами (кроме последнего)
-        if rank > 0:
-            lines.append("├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤")
+        lines.append("  +---+---+---+---+---+---+---+---+")
     
-    lines.append("└─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘")
-    lines.append("   a     b     c     d     e     f     g     h")
+    lines.append("    a   b   c   d   e   f   g   h")
+    lines.append("")
+    lines.append("Обозначения: K=Король Q=Ферзь R=Ладья B=Слон N=Конь P=Пешка")
+    lines.append("Белые=ЗАГЛАВНЫЕ, черные=строчные")
     
     return "\n".join(lines)
 
