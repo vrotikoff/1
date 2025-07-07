@@ -12,27 +12,37 @@ from rl_chess.RL_agent import MCTSAgent
 
 def format_board_for_log(board: chess.Board) -> str:
     """
-    Создает красиво отформатированную строку доски для логирования.
+    Создает красиво отформатированную строку доски для логирования с фиксированной шириной.
     """
+    # Маппинг фигур в простые ASCII символы для фиксированной ширины
+    piece_symbols = {
+        chess.PAWN: {'w': 'P', 'b': 'p'},
+        chess.KNIGHT: {'w': 'N', 'b': 'n'}, 
+        chess.BISHOP: {'w': 'B', 'b': 'b'},
+        chess.ROOK: {'w': 'R', 'b': 'r'},
+        chess.QUEEN: {'w': 'Q', 'b': 'q'},
+        chess.KING: {'w': 'K', 'b': 'k'}
+    }
+    
     lines = []
-    lines.append("┌─────────────────────────────────┐")
+    lines.append("+---+---+---+---+---+---+---+---+")
     
     for rank in range(7, -1, -1):  # 8, 7, 6, ..., 1
-        rank_line = f"│{rank + 1}│"
+        rank_line = f"| "
         for file in range(8):  # a, b, c, ..., h
             square = chess.square(file, rank)
             piece = board.piece_at(square)
             if piece:
-                piece_symbol = piece.unicode_symbol()
+                color = 'w' if piece.color == chess.WHITE else 'b'
+                symbol = piece_symbols[piece.piece_type][color]
             else:
-                piece_symbol = "·"  # Красивая точка вместо пробела
-            rank_line += f"{piece_symbol} │"
+                symbol = " "  # Пустая клетка
+            rank_line += f"{symbol} | "
+        rank_line += f"{rank + 1}"  # Добавляем номер ранга справа
         lines.append(rank_line)
-        if rank > 0:  # Не добавляем разделитель после последней строки
-            lines.append("├─┼─┼─┼─┼─┼─┼─┼─┤")
+        lines.append("+---+---+---+---+---+---+---+---+")
     
-    lines.append("└─┴─┴─┴─┴─┴─┴─┴─┘")
-    lines.append("  a b c d e f g h")
+    lines.append("  a   b   c   d   e   f   g   h")
     
     return "\n".join(lines)
 
