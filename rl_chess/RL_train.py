@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import torch
 import torch.optim as optim
 import chess
@@ -89,21 +90,20 @@ def train():
     logging.info(f"Используется устройство: {device}")
     if device.type == 'cuda':
         logging.info("🚀 АКТИВИРОВАНЫ ОПТИМИЗАЦИИ ДЛЯ H100:")
+        logging.info("   ⚡ torch.compile() - ожидается 2-3x ускорение")
         logging.info("   🔥 Mixed Precision Training - ускорение ~1.5-2x")
         logging.info("   📊 Gradient Accumulation - эффективный батч 4096")
         logging.info("   🎯 Virtual Loss MCTS - улучшенное исследование дерева")
         logging.info(f"   💾 Увеличенный BATCH_SIZE: {BATCH_SIZE} (было 600)")
         logging.info(f"   🧠 Увеличенные MCTS симуляции: {MCTS_SIMULATIONS} (было 3600)")
-        logging.info("   🚀 Ожидаемое ускорение: 3-4x (без torch.compile)")
-        logging.info("   ⚠️ torch.compile() временно отключен (проблема кодировки)")
+        logging.info("   🚀 Ожидаемое ОБЩЕЕ ускорение: 6-10x!")
 
     net = ChessNetwork().to(device)
     
-    # 🚀 torch.compile() - временно отключен из-за проблем с кодировкой
-    # TODO: Включить после решения проблемы с русскими символами в коде
-    # if device.type == 'cuda':
-    #     net = torch.compile(net)
-    #     logging.info("⚡ torch.compile() активирован - ожидается 2-3x ускорение!")
+    # 🚀 torch.compile() - ОГРОМНОЕ ускорение на H100 (2-3x)
+    if device.type == 'cuda':
+        net = torch.compile(net)
+        logging.info("⚡ torch.compile() активирован - ожидается 2-3x ускорение!")
     
     optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
     # Mixed Precision Training для H100 - ускорение ~1.5-2x
