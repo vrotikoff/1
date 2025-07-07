@@ -180,12 +180,12 @@ MEMORY_SIZE = 15000 # Размер буфера воспроизведения (
 EPOCHS_PER_UPDATE = 2 # Количество эпох обучения на собранных данных (уменьшено для скорости)
 GRADIENT_ACCUMULATION_STEPS = 2 # Эмулируем batch_size = 4096 без OOM
 SAVE_EVERY_N_GAMES = 25 # Как часто сохранять модель и чекпоинт (реже = быстрее)
-LOG_BOARD_EVERY_N_MOVES = 15 # Как часто логировать доску (было каждый ход)
 HTML_UPDATE_EVERY_N_MOVES = 20 # Как часто обновлять HTML файл (было 10)
 # Дополнительные оптимизации скорости:
-# - MCTS batch_size уменьшен с 64 до 32
+# - MCTS batch_size уменьшен с 64 до 32  
 # - Логирование MCTS результатов каждые 400 симуляций
 # - Сокращенные логи (топ-3 вместо топ-5 ходов)
+# - Доски логируются каждый ход (это не влияет на скорость)
 MCTS_SIMULATIONS = 1600 # Количество симуляций MCTS на ход (оптимизировано для скорости: было 6400)
 MODEL_SAVE_PATH = "rl_chess_model.pth" # Путь для сохранения модели для игры
 CHECKPOINT_PATH = "rl_checkpoint.pth" # Путь для сохранения прогресса обучения
@@ -260,12 +260,9 @@ def train():
             game_data.append([state_tensor, policy_target])
 
             board.push(move)
-            # Логируем ход (всегда)
+            # Логируем ход и доску (всегда)
             logging.info(f"Игра #{i_game+1} | Ход #{move_counter}: {move.uci()}")
-            
-            # Логируем доску реже для ускорения
-            if move_counter % LOG_BOARD_EVERY_N_MOVES == 0:
-                logging.info(f"\n{format_board_for_log(board)}")
+            logging.info(f"\n{format_board_for_log(board)}")
             
             # Создаем HTML файл реже для ускорения
             if move_counter % HTML_UPDATE_EVERY_N_MOVES == 0:
