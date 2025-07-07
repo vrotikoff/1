@@ -12,37 +12,32 @@ from rl_chess.RL_agent import MCTSAgent
 
 def format_board_for_log(board: chess.Board) -> str:
     """
-    Создает красиво отформатированную строку доски для логирования с фиксированной шириной.
+    Создает красиво отформатированную строку доски с Unicode фигурами и правильным выравниванием.
     """
-    # Маппинг фигур в простые ASCII символы для фиксированной ширины
-    piece_symbols = {
-        chess.PAWN: {'w': 'P', 'b': 'p'},
-        chess.KNIGHT: {'w': 'N', 'b': 'n'}, 
-        chess.BISHOP: {'w': 'B', 'b': 'b'},
-        chess.ROOK: {'w': 'R', 'b': 'r'},
-        chess.QUEEN: {'w': 'Q', 'b': 'q'},
-        chess.KING: {'w': 'K', 'b': 'k'}
-    }
-    
     lines = []
-    lines.append("+---+---+---+---+---+---+---+---+")
+    lines.append("┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐")
     
     for rank in range(7, -1, -1):  # 8, 7, 6, ..., 1
-        rank_line = f"| "
+        rank_line = f"│"
         for file in range(8):  # a, b, c, ..., h
             square = chess.square(file, rank)
             piece = board.piece_at(square)
             if piece:
-                color = 'w' if piece.color == chess.WHITE else 'b'
-                symbol = piece_symbols[piece.piece_type][color]
+                symbol = piece.unicode_symbol()
+                # Добавляем пробелы для выравнивания (фиксированная ширина 3 символа)
+                cell_content = f" {symbol} "
             else:
-                symbol = " "  # Пустая клетка
-            rank_line += f"{symbol} | "
-        rank_line += f"{rank + 1}"  # Добавляем номер ранга справа
+                cell_content = "   "  # 3 пробела для пустой клетки
+            rank_line += f"{cell_content}│"
+        rank_line += f" {rank + 1}"  # Номер ранга
         lines.append(rank_line)
-        lines.append("+---+---+---+---+---+---+---+---+")
+        
+        # Разделитель между рангами (кроме последнего)
+        if rank > 0:
+            lines.append("├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤")
     
-    lines.append("  a   b   c   d   e   f   g   h")
+    lines.append("└─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘")
+    lines.append("   a     b     c     d     e     f     g     h")
     
     return "\n".join(lines)
 
