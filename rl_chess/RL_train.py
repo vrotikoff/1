@@ -207,7 +207,7 @@ def train():
         logging.info(f"      💾 MCTS batch_size: 32 (было 64)")
         logging.info(f"      📊 Epochs per update: {EPOCHS_PER_UPDATE} (было 3)")
         logging.info(f"      🗃️ Memory size: {MEMORY_SIZE} (было 20000)")
-        logging.info(f"      � Логирование досок каждые {LOG_BOARD_EVERY_N_MOVES} ходов")
+        logging.info(f"      📝 Доски логируются каждый ход (скорость не страдает)")
         logging.info(f"      🌐 HTML обновления каждые {HTML_UPDATE_EVERY_N_MOVES} ходов")
         logging.info("   🚀 Ожидаемое ускорение: 4-8x (скорость + качество)!")
 
