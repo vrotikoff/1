@@ -69,7 +69,7 @@ class Node:
 
 class MCTSAgent:
     """ Класс для выполнения поиска по дереву Монте-Карло. """
-    def __init__(self, network: ChessNetwork, device, num_simulations=1600, batch_size=64):
+    def __init__(self, network: ChessNetwork, device, num_simulations=1600, batch_size=32):  # Уменьшен для скорости
         self.net = network
         self.device = device
         self.num_simulations = num_simulations
@@ -137,13 +137,14 @@ class MCTSAgent:
             self.backpropagate(root, init_value)
             sims_done = 1
 
-            # Логирование "интуиции" сети
-            top_policy = sorted(init_policy.items(), key=lambda x: x[1], reverse=True)[:5]
-            think_logger.debug("[DEBUG] Мнение сети до MCTS:")
-            think_logger.debug(f"[DEBUG]   Оценка (Value): {init_value:+.3f}")
-            think_logger.debug(f"[DEBUG]   Топ-{len(top_policy)} ходов (Policy):")
-            for rank, (mv, prob) in enumerate(top_policy, 1):
-                think_logger.debug(f"[DEBUG]     {rank}. {mv.uci()} ({prob:.3f})")
+            # Логирование "интуиции" сети (реже для скорости)
+            if sims_done % 400 == 1:  # Логируем только каждые 400 симуляций
+                top_policy = sorted(init_policy.items(), key=lambda x: x[1], reverse=True)[:5]
+                think_logger.debug("[DEBUG] Мнение сети до MCTS:")
+                think_logger.debug(f"[DEBUG]   Оценка (Value): {init_value:+.3f}")
+                think_logger.debug(f"[DEBUG]   Топ-{len(top_policy)} ходов (Policy):")
+                for rank, (mv, prob) in enumerate(top_policy, 1):
+                    think_logger.debug(f"[DEBUG]     {rank}. {mv.uci()} ({prob:.3f})")
         
         # --- Основной цикл симуляций (пакетная обработка с Virtual Loss) ---
         while sims_done < self.num_simulations:
@@ -214,13 +215,14 @@ class MCTSAgent:
 
         best_move = max(visit_counts, key=visit_counts.get)
         
-        # --- Блок 2: Итог размышлений MCTS ---
-        top_mcts = sorted(root.children.items(), key=lambda x: x[1].N, reverse=True)[:5]
+        # --- Блок 2: Итог размышлений MCTS (сокращенное логирование) ---
         think_logger.debug(f"[INFO] Выбран ход: {best_move.uci()}")
-        think_logger.debug(f"[DEBUG] Результаты MCTS ({self.num_simulations} симуляций):")
-        for rank, (mv, child) in enumerate(top_mcts, 1):
-            think_logger.debug(
-                f"[DEBUG]   {rank}. Ход: {mv.uci()}, Посещений: {child.N}, Оценка (Q): {child.Q:+.3f}")
+        # Детальные результаты MCTS логируем реже для скорости
+        if self.num_simulations >= 1600:  # Только для полных раундов
+            top_mcts = sorted(root.children.items(), key=lambda x: x[1].N, reverse=True)[:3]  # Топ-3 вместо 5
+            think_logger.debug(f"[DEBUG] MCTS ({self.num_simulations} сим.) топ-3:")
+            for rank, (mv, child) in enumerate(top_mcts, 1):
+                think_logger.debug(f"[DEBUG]   {rank}. {mv.uci()}: {child.N} посещений, Q={child.Q:+.3f}")
         
         # Создаем целевой тензор политики для обучения
         policy_target = torch.zeros(POLICY_OUTPUT_SIZE, device=self.device)

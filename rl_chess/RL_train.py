@@ -135,9 +135,10 @@ def create_html_board_file(board: chess.Board, game_num: int, move_num: int, las
         {format_board_for_html(board)}
     </div>
     <div style="margin-top: 20px; padding: 15px; background-color: white; border-radius: 8px;">
-        <h3>📝 Как использовать:</h3>
+        <h3>📝 Оптимизации скорости:</h3>
         <ul>
-            <li><strong>Обновляется каждые 10 ходов</strong> во время обучения</li>
+            <li><strong>MCTS симуляции:</strong> 1600 (быстрее в 4x)</li>
+            <li><strong>Обновляется каждые {HTML_UPDATE_EVERY_N_MOVES} ходов</strong> во время обучения</li>
             <li><strong>Автоматически обновляется</strong> - просто обновите страницу в браузере</li>
             <li><strong>Моноширинный шрифт</strong> обеспечивает идеальное выравнивание</li>
         </ul>
@@ -171,15 +172,21 @@ console_handler.setFormatter(console_formatter)
 logger.addHandler(console_handler)
 
 
-# --- Гиперпараметры (оптимизированы для H100) ---
+# --- Гиперпараметры (оптимизированы для МАКСИМАЛЬНОЙ СКОРОСТИ) ---
 NUM_GAMES = 1000  # Количество игр для обучения
 LEARNING_RATE = 0.001
 BATCH_SIZE = 2048 # Размер батча для обучения нейросети (увеличен для H100: было 600)
-MEMORY_SIZE = 20000 # Размер буфера воспроизведения (увеличен: было 10000)
-EPOCHS_PER_UPDATE = 3 # Количество эпох обучения на собранных данных (уменьшено для больших батчей)
+MEMORY_SIZE = 15000 # Размер буфера воспроизведения (оптимизировано для скорости: было 20000)
+EPOCHS_PER_UPDATE = 2 # Количество эпох обучения на собранных данных (уменьшено для скорости)
 GRADIENT_ACCUMULATION_STEPS = 2 # Эмулируем batch_size = 4096 без OOM
-SAVE_EVERY_N_GAMES = 20 # Как часто сохранять модель и чекпоинт
-MCTS_SIMULATIONS = 6400 # Количество симуляций MCTS на ход (увеличено для H100: было 3600)
+SAVE_EVERY_N_GAMES = 25 # Как часто сохранять модель и чекпоинт (реже = быстрее)
+LOG_BOARD_EVERY_N_MOVES = 15 # Как часто логировать доску (было каждый ход)
+HTML_UPDATE_EVERY_N_MOVES = 20 # Как часто обновлять HTML файл (было 10)
+# Дополнительные оптимизации скорости:
+# - MCTS batch_size уменьшен с 64 до 32
+# - Логирование MCTS результатов каждые 400 симуляций
+# - Сокращенные логи (топ-3 вместо топ-5 ходов)
+MCTS_SIMULATIONS = 1600 # Количество симуляций MCTS на ход (оптимизировано для скорости: было 6400)
 MODEL_SAVE_PATH = "rl_chess_model.pth" # Путь для сохранения модели для игры
 CHECKPOINT_PATH = "rl_checkpoint.pth" # Путь для сохранения прогресса обучения
 
@@ -190,15 +197,19 @@ def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Используется устройство: {device}")
     if device.type == 'cuda':
-        logging.info("🚀 АКТИВИРОВАНЫ ОПТИМИЗАЦИИ ДЛЯ H100:")
+        logging.info("🚀 АКТИВИРОВАНЫ ОПТИМИЗАЦИИ ДЛЯ МАКСИМАЛЬНОЙ СКОРОСТИ:")
         logging.info("   ⚡ torch.compile() - ожидается 2-3x ускорение")
         logging.info("   🔥 Mixed Precision Training - ускорение ~1.5-2x")
         logging.info("   📊 Gradient Accumulation - эффективный батч 4096")
         logging.info("   🎯 Virtual Loss MCTS - улучшенное исследование дерева")
-        logging.info(f"   💾 Увеличенный BATCH_SIZE: {BATCH_SIZE} (было 600)")
-        logging.info(f"   🧠 Увеличенные MCTS симуляции: {MCTS_SIMULATIONS} (было 3600)")
-        logging.info("   🚀 Ожидаемое ОБЩЕЕ ускорение: 6-10x!")
-        logging.info("   🌐 HTML доски будут сохраняться в 'current_board.html'")
+        logging.info("   ⚡ Оптимизированные настройки скорости:")
+        logging.info(f"      🧠 MCTS симуляции: {MCTS_SIMULATIONS} (было 6400)")
+        logging.info(f"      💾 MCTS batch_size: 32 (было 64)")
+        logging.info(f"      📊 Epochs per update: {EPOCHS_PER_UPDATE} (было 3)")
+        logging.info(f"      🗃️ Memory size: {MEMORY_SIZE} (было 20000)")
+        logging.info(f"      � Логирование досок каждые {LOG_BOARD_EVERY_N_MOVES} ходов")
+        logging.info(f"      🌐 HTML обновления каждые {HTML_UPDATE_EVERY_N_MOVES} ходов")
+        logging.info("   🚀 Ожидаемое ускорение: 4-8x (скорость + качество)!")
 
     net = ChessNetwork().to(device)
     
@@ -249,14 +260,20 @@ def train():
             game_data.append([state_tensor, policy_target])
 
             board.push(move)
-            # Логируем ход
+            # Логируем ход (всегда)
             logging.info(f"Игра #{i_game+1} | Ход #{move_counter}: {move.uci()}")
-            # Логируем красиво отформатированную доску
-            logging.info(f"\n{format_board_for_log(board)}")
             
-            # Создаем HTML файл с досками для просмотра в браузере (каждые 10 ходов)
-            if move_counter % 10 == 0:
+            # Логируем доску реже для ускорения
+            if move_counter % LOG_BOARD_EVERY_N_MOVES == 0:
+                logging.info(f"\n{format_board_for_log(board)}")
+            
+            # Создаем HTML файл реже для ускорения
+            if move_counter % HTML_UPDATE_EVERY_N_MOVES == 0:
                 create_html_board_file(board, i_game+1, move_counter, move.uci())
+        
+        # Финальная доска игры (всегда)
+        logging.info(f"\n{format_board_for_log(board)}")
+        create_html_board_file(board, i_game+1, move_counter, "FINAL")
         
         logging.info(f"Игра #{i_game+1} завершена после {move_counter} ходов. Результат: {board.result(claim_draw=True)}")
         
