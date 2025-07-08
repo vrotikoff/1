@@ -5,6 +5,7 @@ import sys
 import os
 import argparse
 import torch
+import time
 
 from rl_chess.RL_network import ChessNetwork
 from rl_chess.RL_agent import MCTSAgent
@@ -102,10 +103,36 @@ def main(model_path, simulations, player_color_choice):
         sys.exit(1)
     ai = MCTSAgent(net, device=device, num_simulations=simulations)
 
+    # --- Выбор цвета игрока ---
+    if player_color_choice is None:
+        print("\n🎮 ВЫБОР ЦВЕТА ДЛЯ GUI ИГРЫ:")
+        player_color = None
+        while player_color not in [chess.WHITE, chess.BLACK]:
+            choice = input("Выберите ваш цвет (w - белые, b - черные): ").lower()
+            if choice == 'w':
+                player_color = chess.WHITE
+                print("Вы играете за белых! GUI окно откроется через 2 секунды...")
+            elif choice == 'b':
+                player_color = chess.BLACK
+                print("Вы играете за черных! GUI окно откроется через 2 секунды...")
+            else:
+                print("Введите 'w' для белых или 'b' для черных")
+    else:
+        player_color = chess.WHITE if player_color_choice == 'w' else chess.BLACK
+        print(f"Цвет задан через командную строку: {'белые' if player_color == chess.WHITE else 'черные'}")
+    
+    # Небольшая пауза если цвет выбран в консоли
+    if player_color_choice is None:
+        time.sleep(2)
+
     # --- Игровое состояние ---
     board = chess.Board()
     selected_square = None
-    player_color = chess.WHITE if player_color_choice == 'w' else chess.BLACK
+    
+    # Обновляем заголовок окна с выбранным цветом
+    color_text = "белые" if player_color == chess.WHITE else "черные"
+    initial_turn_text = "Ваш ход" if player_color == chess.WHITE else "Ход ИИ"
+    pygame.display.set_caption(f"RL Chess AI - Вы играете за {color_text} - {initial_turn_text}")
 
     # --- Игровой цикл ---
     running = True
@@ -140,11 +167,11 @@ def main(model_path, simulations, player_color_choice):
 
         # --- Ход ИИ ---
         if not is_player_turn and not board.is_game_over():
-            pygame.display.set_caption("RL Chess AI - ИИ думает...")
+            pygame.display.set_caption(f"RL Chess AI - Вы играете за {color_text} - ИИ думает...")
             ai_move, _ = ai.get_move(board)
             if ai_move:
                 board.push(ai_move)
-            pygame.display.set_caption("RL Chess AI - Ваш ход")
+            pygame.display.set_caption(f"RL Chess AI - Вы играете за {color_text} - Ваш ход")
 
         # --- Отрисовка ---
         screen.fill((40, 40, 40))
@@ -179,7 +206,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Играть против RL ИИ с графическим интерфейсом.")
     parser.add_argument("--model", type=str, default="rl_chess_model.pth", help="Путь к файлу модели.")
     parser.add_argument("--simulations", type=int, default=200, help="Количество симуляций MCTS за ход.")
-    parser.add_argument("--color", type=str, choices=['w', 'b'], default='w', help="Ваш цвет (w - белые, b - черные).")
+    parser.add_argument("--color", type=str, choices=['w', 'b'], default=None, help="Ваш цвет (w - белые, b - черные). Если не указан, будет предложен выбор.")
     args = parser.parse_args()
     
     main(args.model, args.simulations, args.color) 
