@@ -82,7 +82,21 @@ def main(model_path, simulations, player_color_choice):
     print("Загрузка RL модели...")
     net = ChessNetwork().to(device)
     try:
-        net.load_state_dict(torch.load(model_path, map_location=device))
+        state_dict = torch.load(model_path, map_location=device)
+        
+        # Исправляем ключи если модель была сохранена с torch.compile() (префиксы "_orig_mod.")
+        if any(key.startswith('_orig_mod.') for key in state_dict.keys()):
+            print("Обнаружена модель с torch.compile(), исправляем ключи...")
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('_orig_mod.'):
+                    new_key = key[10:]  # Убираем префикс "_orig_mod."
+                    new_state_dict[new_key] = value
+                else:
+                    new_state_dict[key] = value
+            state_dict = new_state_dict
+        
+        net.load_state_dict(state_dict)
     except FileNotFoundError:
         print(f"ОШИБКА: Файл модели не найден: '{model_path}'")
         sys.exit(1)

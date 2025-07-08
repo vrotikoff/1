@@ -16,7 +16,21 @@ def play(model_path, simulations_per_move):
     print("Загрузка обученной модели...")
     net = ChessNetwork().to(device)
     try:
-        net.load_state_dict(torch.load(model_path, map_location=device))
+        state_dict = torch.load(model_path, map_location=device)
+        
+        # Исправляем ключи если модель была сохранена с torch.compile() (префиксы "_orig_mod.")
+        if any(key.startswith('_orig_mod.') for key in state_dict.keys()):
+            print("Обнаружена модель с torch.compile(), исправляем ключи...")
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('_orig_mod.'):
+                    new_key = key[10:]  # Убираем префикс "_orig_mod."
+                    new_state_dict[new_key] = value
+                else:
+                    new_state_dict[key] = value
+            state_dict = new_state_dict
+        
+        net.load_state_dict(state_dict)
         print("Модель успешно загружена.")
     except FileNotFoundError:
         print(f"Ошибка: Файл модели не найден по пути: {model_path}")
