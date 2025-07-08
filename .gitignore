@@ -1,0 +1,22 @@
+# Лог файлы обучения
+training_log.txt
+thinking_log.txt
+*.log
+
+# Сохраненные модели и чекпоинты
+rl_chess_model.pth
+rl_checkpoint.pth
+*.pth
+
+# HTML файлы досок
+current_board.html
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Временные файлы
+*.tmp
+*.swp
+*~
